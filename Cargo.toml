@@ -1,0 +1,21 @@
+[package]
+name = "rusting"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "rusting"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rusting"
+path = "src/main.rs"
+
+[profile.release]
+lto = true
+
+[dependencies]
+reqwest = { version = "*", features = ["blocking"] }
+async-channel = { version = "*" }
+num_cpus = "*"
+tokio = { version = "*", features = ["full"] }
