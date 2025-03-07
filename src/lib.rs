@@ -29,12 +29,17 @@ async fn request_pool(channel: Receiver<String>, handlers: &mut Vec<JoinHandle<(
         handlers.push(tokio::spawn(async move {
             while let Ok(url) = rt.recv().await {
                 let start = Instant::now();
-                match timeout(Duration::from_secs(30), reqwest::get(&url)).await {
-                    Ok(pass) => match pass {
-                        Ok(res) => println!(
+                let timeout_duration = Duration::from_secs(30);
+
+                let request_fut = reqwest::get(&url);
+                let timeout_fut = timeout(timeout_duration, request_fut);
+
+                match timeout_fut.await {
+                    Ok(request) => match request {
+                        Ok(response) => println!(
                             "[Worker {i}]: {0} -> {1}: in {2:.2}s",
-                            res.url(),
-                            res.status(),
+                            response.url(),
+                            response.status(),
                             (Instant::now() - start).as_secs_f32()
                         ),
                         Err(_) => {
@@ -59,11 +64,10 @@ async fn request_pool(channel: Receiver<String>, handlers: &mut Vec<JoinHandle<(
 }
 
 async fn stream_url(channel: Sender<String>, data: String) {
-    for url in data.split(',') {
-        channel
-            .send(String::from(url.trim()).replace("\n", ""))
-            .await
-            .unwrap();
+    for raw_url in data.split(',') {
+        let url = String::from(raw_url.trim()).replace("\n", "");
+
+        channel.send(url).await.unwrap();
     }
 }
 
