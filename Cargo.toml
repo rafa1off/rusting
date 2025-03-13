@@ -16,6 +16,6 @@ lto = true
 
 [dependencies]
 reqwest = { version = "*", features = ["blocking"] }
-async-channel = { version = "*" }
+async-channel = "*"
 num_cpus = "*"
 tokio = { version = "*", features = ["full"] }

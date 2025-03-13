@@ -1,6 +1,7 @@
 use std::{env, time::Duration};
 
 use async_channel::{Receiver, Sender};
+use reqwest::Client;
 use tokio::{
     fs,
     task::JoinHandle,
@@ -24,14 +25,17 @@ async fn read_args() -> (String, i32) {
 }
 
 async fn request_pool(channel: Receiver<String>, handlers: &mut Vec<JoinHandle<()>>, workers: i32) {
+    let client = Client::new();
+
     for i in 0..workers {
-        let rt = channel.clone();
+        let rt = Receiver::clone(&channel);
+        let cl = Client::clone(&client);
         handlers.push(tokio::spawn(async move {
             while let Ok(url) = rt.recv().await {
                 let start = Instant::now();
                 let timeout_duration = Duration::from_secs(30);
 
-                let request_fut = reqwest::get(&url);
+                let request_fut = cl.get(&url).send();
                 let timeout_fut = timeout(timeout_duration, request_fut);
 
                 match timeout_fut.await {
