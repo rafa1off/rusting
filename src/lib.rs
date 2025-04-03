@@ -8,7 +8,7 @@ use tokio::{
     time::{Instant, timeout},
 };
 
-async fn read_args() -> (String, i32) {
+fn read_args() -> (String, usize) {
     let mut args = env::args();
     args.next();
 
@@ -17,15 +17,16 @@ async fn read_args() -> (String, i32) {
         .expect("Usage: 'rusting <path/to/csv> [OPTIONAL] <workers>'");
 
     let workers = match args.next() {
-        Some(x) => x.parse::<i32>().unwrap(),
-        None => num_cpus::get().try_into().unwrap(),
+        Some(x) => x.parse().unwrap(),
+        None => num_cpus::get(),
     };
 
     (path, workers)
 }
 
-async fn request_pool(channel: Receiver<String>, handlers: &mut Vec<JoinHandle<()>>, workers: i32) {
+async fn request_pool(channel: Receiver<String>, workers: usize) -> Vec<JoinHandle<()>> {
     let client = Client::new();
+    let mut handlers = Vec::with_capacity(workers);
 
     for i in 0..workers {
         let rt = Receiver::clone(&channel);
@@ -65,6 +66,8 @@ async fn request_pool(channel: Receiver<String>, handlers: &mut Vec<JoinHandle<(
             }
         }));
     }
+
+    handlers
 }
 
 async fn stream_url(channel: Sender<String>, data: String) {
@@ -76,25 +79,19 @@ async fn stream_url(channel: Sender<String>, data: String) {
 }
 
 pub async fn read_csv() {
-    let (path, workers) = read_args().await;
+    let (path, workers) = read_args();
 
-    let data = fs::read_to_string(path);
+    let data = fs::read_to_string(path)
+        .await
+        .expect("Error reading file");
 
     let (sx, rx) = async_channel::unbounded();
 
-    let mut handlers = Vec::new();
+    let mut pool = request_pool(rx, workers).await;
 
-    let pool_fut = request_pool(rx, &mut handlers, workers);
+    stream_url(sx, data).await;
 
-    let stream_fut = stream_url(
-        sx,
-        data.await
-            .expect("Error reading file path"),
-    );
-
-    pool_fut.await;
-    stream_fut.await;
-    for handler in handlers.drain(..) {
-        handler.await.unwrap();
+    for worker in pool.drain(..) {
+        worker.await.unwrap();
     }
 }
